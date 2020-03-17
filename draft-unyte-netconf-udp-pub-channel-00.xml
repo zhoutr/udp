@@ -1,0 +1,932 @@
+<?xml version="1.0" encoding="US-ASCII"?>
+<!DOCTYPE rfc SYSTEM "rfc2629.dtd">
+<?rfc toc="yes"?>
+<?rfc tocompact="yes"?>
+<?rfc tocdepth="3"?>
+<?rfc tocindent="yes"?>
+<?rfc symrefs="yes"?>
+<?rfc sortrefs="yes"?>
+<?rfc comments="yes"?>
+<?rfc inline="yes"?>
+<?rfc compact="yes"?>
+<?rfc subcompact="no"?>
+<rfc category="std" docName="draft-unyte-netconf-udp-pub-channel-00"
+     ipr="trust200902">
+  <front>
+    <title abbrev="udp-pub-channel">UDP based Publication Channel for
+    Streaming Telemetry</title>
+
+    <author fullname="Guangying Zheng" initials="G." surname="Zheng">
+      <organization>Huawei</organization>
+
+      <address>
+        <postal>
+          <street>101 Yu-Hua-Tai Software Road</street>
+
+          <city>Nanjing</city>
+
+          <code/>
+
+          <region>Jiangsu</region>
+
+          <country>China</country>
+        </postal>
+
+        <phone/>
+
+        <facsimile/>
+
+        <email>zhengguangying@huawei.com</email>
+      </address>
+    </author>
+
+    <author fullname="Tianran Zhou" initials="T." surname="Zhou">
+      <organization>Huawei</organization>
+
+      <address>
+        <postal>
+          <street>156 Beiqing Rd., Haidian District</street>
+
+          <city>Beijing</city>
+
+          <region/>
+
+          <code/>
+
+          <country>China</country>
+        </postal>
+
+        <phone/>
+
+        <facsimile/>
+
+        <email>zhoutianran@huawei.com</email>
+
+        <uri/>
+      </address>
+    </author>
+
+    <author fullname="Alexander Clemm" initials="A." surname="Clemm">
+      <organization>Futurewei</organization>
+
+      <address>
+        <postal>
+          <street>2330 Central Expressway</street>
+
+          <city>Santa Clara</city>
+
+          <region>California</region>
+
+          <code/>
+
+          <country>USA</country>
+        </postal>
+
+        <phone/>
+
+        <facsimile/>
+
+        <email>alex@futurewei.com</email>
+
+        <uri/>
+      </address>
+    </author>
+
+    <author fullname="Thomas Graf" initials="T." surname="Graf">
+      <organization>Swisscom</organization>
+
+      <address>
+        <postal>
+          <street>Binzring 17</street>
+
+          <city>Zuerich  8045</city>
+
+          <region/>
+
+          <code/>
+
+          <country>Switzerland</country>
+        </postal>
+
+        <phone/>
+
+        <facsimile/>
+
+        <email>thomas.graf@swisscom.com</email>
+
+        <uri/>
+      </address>
+    </author>
+
+    <author fullname="Pierre Francois" initials="P." surname="Francois">
+      <organization>INSA-Lyon</organization>
+
+      <address>
+        <postal>
+          <street/>
+
+          <city>Lyon</city>
+
+          <region/>
+
+          <code/>
+
+          <country>France</country>
+        </postal>
+
+        <phone/>
+
+        <facsimile/>
+
+        <email>pierre.francois@insa-lyon.fr</email>
+
+        <uri/>
+      </address>
+    </author>
+
+    <date day="9" month="March" year="2020"/>
+
+    <workgroup>NETCONF</workgroup>
+
+    <abstract>
+      <t>This document describes a UDP-based publication channel for streaming
+      telemetry use to collect data from devices. A new shim header is
+      proposed to facilitate the distributed data collection mechanism which
+      directly pushes data from line cards to the collector. Because of the
+      lightweight UDP encapsulation, higher frequency and better transit
+      performance can be achieved.</t>
+    </abstract>
+
+    <note title="Requirements Language">
+      <t>The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT",
+      "SHOULD", "SHOULD NOT", "RECOMMENDED", "MAY", and "OPTIONAL" in this
+      document are to be interpreted as described in <xref
+      target="RFC2119">RFC 2119</xref>.</t>
+    </note>
+  </front>
+
+  <middle>
+    <section title="Introduction">
+      <t>Streaming telemetry refers to sending a continuous stream of
+      operational data from a device to a remote receiver. This provides an
+      ability to monitor a network from remote and to provide network
+      analytics. Devices generate telemetry data and push that data to a
+      collector for further analysis. By streaming the data, much better
+      performance, finer-grained sampling, monitoring accuracy, and bandwidth
+      utilization can be achieved than with polling-based alternatives.</t>
+
+      <t><xref
+      target="RFC8639">Sub-Notif</xref>
+      defines a mechanism that allows a collector to subscribe to updates of
+      YANG-defined data that is maintained in a <xref
+      target="RFC7950">YANG</xref> datastore. The mechanism separates the
+      management and control of subscriptions from the transport that is used
+      to actually stream and deliver the data. Three transports, <xref
+      target="RFC8640">NETCONF transport</xref>, <xref target="I-D.ietf-netconf-restconf-notif">RESTCONF
+      transport</xref> and <xref target="I-D.ietf-netconf-https-notif">HTTPS
+      transport</xref>, have been defined so far for the notification
+      messages.</t>
+
+      <t>While powerful in its features and general in its architecture, in
+      its current form the mechanism needs to be extended to stream telemetry
+      data at high velocity from devices that feature a distributed
+      architecture. The transports that have been defined so far, NETCONF and
+      HTTP, are ultimately based on TCP and lack the efficiency needed to
+      stream data continuously at high velocity. A lighter-weight, more
+      efficient transport, e.g. a transport based on UDP is needed. <list
+          style="symbols">
+          <t>Firstly, data collector will suffer a lot of TCP connections
+          from, for example, many line cards equipped on different
+          devices.</t>
+
+          <t>Secondly, as no connection state needs to be maintained, UDP
+          encapsulation can be easily implemented by hardware which will
+          further improve the performance.</t>
+
+          <t>Thirdly, because of the lightweight UDP encapsulation, higher
+          frequency and better transit performance can be achieved, which is
+          important for streaming telemetry.</t>
+        </list></t>
+
+      <t>This document specifies a higher-performance transport option for
+      Sub-Notif that leverages UDP. Specifically, it facilitates the
+      distributed data collection mechanism described in <xref
+      target="I-D.zhou-netconf-multi-stream-originators"/>. In the case of
+      data originating from multiple line cards, the centralized design
+      requires data to be internally forwarded from those line cards to the
+      push server, presumably on a main board, which then combines the
+      individual data items into a single consolidated stream. The centralized
+      data collection mechanism can result in a performance bottleneck,
+      especially when large amounts of data are involved. What is needed
+      instead is the support for a distributed mechanism that allows to
+      directly push multiple individual substreams, e.g. one from each line
+      card, without needing to first pass them through an additional
+      processing stage for internal consolidation, but still allowing those
+      substreams to be managed and controlled via a single subscription. The
+      proposed UDP based Publication Channel (UPC) natively supports the
+      distributed data collection mechanism.</t>
+
+      <t>The transport described in this document can be used for transmitting
+      notification messages over both IPv4 and <xref
+      target="RFC8200">IPv6</xref>.</t>
+
+      <t>While this document will focus on the data publication channel, the
+      subscription can be used in conjunction with the mechanism proposed in
+      <xref target="RFC8639"/> with extensions <xref
+      target="I-D.zhou-netconf-multi-stream-originators"/>.</t>
+    </section>
+
+    <section title="Terminologies">
+      <t>Streaming Telemetry: refers to sending a continuous stream of
+      operational data from a device to a remote receiver. This provides an
+      ability to monitor a network from remote and to provide network
+      analytics.</t>
+    </section>
+
+    <section title="Transport Mechanisms">
+      <t>For a complete pub-sub mechanism, this section will describe how the
+      UPC is used to interact with the Subscription Channel relying on NETCONF
+      or RESTCONF.</t>
+
+      <section title="Dynamic Subscription">
+        <t>Dynamic subscriptions for Sub-Notif are configured and managed via
+        signaling messages transported over <xref
+        target="RFC6241">NETCONF</xref> or <xref
+        target="RFC8040">RESTCONF</xref>. The Sub-Notif defined RPCs which are
+        sent and responded via the Subscription Channel (a), between the
+        Subscriber and the Subscription Server of the Publisher. In this case,
+        only one Receiver is associated with the Subscriber. In the Publisher,
+        there may be multiple data originators. Notification messages are
+        pushed on separate channels (b), from different data originators to
+        the Receiver.</t>
+
+        <t><figure title="Fig. 2 Call Flow For Dynamic Subscription">
+            <artwork><![CDATA[
++--------------+                         +--------------+
+|  Collector   |                         |  Publisher   |
+|              |                         |              |
+|  (a)   (b)   |                         |  (a)    (b)  |
++--+------+----+                         +--+-------+---+
+   |      |                                 |       |
+   |      |     RPC:establish-subscription  |       |
+   +---------------------------------------->       |
+   |      |     RPC Reply: OK               |       |
+   <----------------------------------------+       |
+   |      |     UPC:notifications           |       |
+   |      <-----------------------------------------+
+   |      |                                 |       |
+   |      |     RPC:modify-subscription     |       |
+   +---------------------------------------->       |
+   |      |     RPC Reply: OK               |       |
+   <----------------------------------------+       |
+   |      |     UPC:notifications           |       |
+   |      <-----------------------------------------+
+   |      |                                 |       |
+   |      |     RPC:delete-subscription     |       |
+   +---------------------------------------->       |
+   |      |     RPC Reply: OK               |       |
+   <----------------------------------------+       |
+   |      |                                 |       |
+   |      |                                 |       |
+   +      +                                 +       +
+]]></artwork>
+          </figure></t>
+
+        <t>In the case of dynamic subscription, the Receiver and the
+        Subscriber SHOULD be colocated. So UPC can use the source IP address
+        of the Subscription Channel as it's destination IP address. The
+        Receiver MUST support listening messages at the IANA-assigned PORT-X
+        or PORT-Y, but MAY be configured to listen at a different port.</t>
+
+        <t>For dynamic subscription, the Publication Channels MUST share fate
+        with the subscription session. In other words, when the
+        delete-subscription is received or the subscription session is broken,
+        all the associated Publication Channels MUST be closed.</t>
+      </section>
+
+      <section title="Configured Subscription ">
+        <t>For a Configured Subscription, there is no guarantee that the
+        Subscriber is currently in place with the associated Receiver(s). As
+        defined in Sub-Notif, the subscription configuration contains the
+        location information of all the receivers, including the IP address
+        and the port number. So that the data originator can actively send
+        generated messages to the corresponding Receivers via the UPC.</t>
+
+        <t>The first message MUST be a separate subscription-started
+        notification to indicate the Receiver that the pushing is started.
+        Then, the notifications can be sent immediately without any wait.</t>
+
+        <t>All the subscription state notifications, as defined in <xref
+        target="RFC8639"/>, MUST be
+        encapsulated to be separated notification messages.</t>
+
+        <t><figure title="Fig. 3 Call Flow For Configured Subscription">
+            <artwork><![CDATA[
++--------------+                         +--------------+
+|  Collector   |                         |  Publisher   |
+|              |                         |              |
+|  (a)   (b)   |                         |  (a)    (b)  |
++--+------+----+                         +--+-------+---+
+   |      |                                 |       |
+   |      |     Capability Exchange         |       |
+   <---------------------------------------->       |
+   |      |                                 |       |
+   |      |     Edit config(create)         |       |
+   +---------------------------------------->       |
+   |      |     RPC Reply: OK               |       |
+   <----------------------------------------+       |
+   |      |     UPC:subscription started    |       |
+   |      <-----------------------------------------+
+   |      |     UPC:notifications           |       |
+   |      <-----------------------------------------+
+   |      |                                 |       |
+   |      |     Edit config(delete)         |       |
+   +---------------------------------------->       |
+   |      |     RPC Reply: OK               |       |
+   <----------------------------------------+       |
+   |      |     UPC:subscription terminated |       |
+   |      <-----------------------------------------+
+   |      |                                 |       |
+   |      |                                 |       |
+   +      +                                 +       +
+]]></artwork>
+          </figure></t>
+      </section>
+    </section>
+
+    <section title="UDP Transport for Publication Channel">
+      <t/>
+
+      <section title="Design Overview">
+        <t>As specified in Sub-Notif, the telemetry data is encapsulated in
+        the NETCONF/RESTCONF notification message, which is then encapsulated
+        and carried in the transport protocols, e.g. TLS, HTTP2. The following
+        figure shows the overview of the typical UPC message structure.</t>
+
+        <t><list style="symbols">
+            <t>The Message Header contains information that can facilitate the
+            message transmission before de-serializing the notification
+            message.</t>
+
+            <t>Notification Message is the encoded content that the
+            publication channel transports. The common encoding method
+            includes <eref
+            target="https://developers.google.com/protocol-buffers/">GPB</eref>,
+            <xref target="RFC7049">CBOR</xref>, JSON, and XML. <xref
+            target="I-D.ietf-netconf-notification-messages"/> describes the
+            structure of the Notification Message for both single notification
+            and multiple bundled notifications.</t>
+          </list></t>
+
+        <t><figure title="Fig. 4 UDP Publication Message Overview">
+            <artwork align="center"><![CDATA[
++-------+  +--------------+  +--------------+
+|  UDP  |  |   Message    |  | Notification |
+|       |  |   Header     |  | Message      |
++-------+  +--------------+  +--------------+
+]]></artwork>
+          </figure></t>
+
+        <t/>
+      </section>
+
+      <section title="Data Format of the UPC Message Header">
+        <t>The UPC Message Header contains information that can facilitate the
+        message transmission before de-serializing the notification message.
+        The data format is shown as follows.</t>
+
+        <figure title="Fig. 3 UPC Message Header Format">
+          <artwork align="center"><![CDATA[
+ 0                   1                   2                   3
+ 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
++-------+---------------+-------+-------------------------------+
+| Vers. |    Flag       |  ET   |      Length                   |
++-------+---------------+-------+-------------------------------+
+|                       Message-Generator-ID                    |
++---------------------------------------------------------------+
+|                       Message ID                              |
++---------------------------------------------------------------+
+~                       Options                                 ~
++---------------------------------------------------------------+
+
+]]></artwork>
+        </figure>
+
+        <t/>
+
+        <t>The Message Header contains the following field:</t>
+
+        <t><list style="symbols">
+            <t>Vers.: represents the PDU (Protocol Data Unit) encoding
+            version. The initial version value is 0.</t>
+
+            <t>Flag: is a bitmap indicating what features this packet has and
+            the corresponding options attached. Each bit associates to one
+            feature and one option data. When the bit is set to 1, the
+            associated feature is enabled and the option data is attached. The
+            sequence of the presence of the options follows the bit order of
+            the bitmap. In this document, the flag is specified as follows:
+            <list style="symbols">
+                <t>bit 0, the fragmentation flag;</t>
+
+                <t>other bits are reserved.</t>
+              </list></t>
+
+            <t>ET: is a 4 bits identifier to indicate the encoding type used
+            for the Notification Message. 16 types of encoding can be
+            expressed:<list style="symbols">
+                <t>0: GPB;</t>
+
+                <t>1: CBOR;</t>
+
+                <t>2: JSON;</t>
+
+                <t>3: XML;</t>
+
+                <t>others are reserved.</t>
+              </list></t>
+
+            <t>Length: is the total length of the message, measured in octets,
+            including message header.</t>
+
+            <t>Message-Generator-ID: is a 32-bit identifier of the process
+            which created the notification message. This allows disambiguation
+            of an information source, such as the identification of different
+            line cards sending the notification messages. The source IP
+            address of the UDP datagrams SHOULD NOT be interpreted as the
+            identifier for the host that originated the UPC message. The
+            entity sending the UPC message could be merely a relay.</t>
+
+            <t>The Message ID is generated continuously by the message
+            generator. Different subscribers share the same notification ID
+            sequence.</t>
+
+            <t>Options: is a variable-length field. The details of the Options
+            will be described in the respective sections below.</t>
+          </list></t>
+
+        <t/>
+      </section>
+
+      <section title="Options">
+        <t>The order of packing the data fields in the Options field follows
+        the bit order of the Flag field.</t>
+
+        <section title="Fragmentation Option">
+          <t>UDP palyload has a theoretical length limitation to 65535. Other
+          encapsulation headers will make the actual payload even shorter.
+          Binary encodings like GPB and CBOR can make the message compact. So
+          that the message can be encapsulated within one UDP packet, hence
+          fragmentation will not easily happen. However, text encodings like
+          JSON and XML can easily make the message exceed the UDP length
+          limitation.</t>
+
+          <t>The Fragmentation Option can help not Application layer can split
+          the YANG tree into several leaves. Or table into several rows. But
+          the leaf or the row cannot be split any further. Now we consider a
+          very long path. Since the GPB and CBOR are so compact, it's easy to
+          fit into a UDP packet. But for JSON or XML, it is possible that even
+          one leaf will exceed the UDP boundary.</t>
+
+          <t><figure title="Fig. 5 Fragmentation Option Format">
+              <artwork align="center"><![CDATA[
+ 0                   1                   2                   3
+ 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
++-------------------------------------------------------------+-+
+|            Fragment Number                                  |L|
++-------------------------------------------------------------+-+]]></artwork>
+            </figure>The Fragmentation Option is available in the message
+          header when the fragmentation flag is set to 1. The option
+          contains:</t>
+
+          <t>Fragment Number: indicates the sequence number of the current
+          fragment.</t>
+
+          <t>L: is a flag to indicate whether the current fragment is the last
+          one. When 0 is set, current fragment is not the last one, hence more
+          fragments are expected. When 1 is set, current fragment is the last
+          one.</t>
+        </section>
+      </section>
+
+      <section title="Data Encoding">
+        <t>Subscribed data can be encoded in GPB, CBOR, XML or JSON format. It
+        is conceivable that additional encodings may be supported as options
+        in the future. This can be accomplished by augmenting the subscription
+        data model with additional identity statements used to refer to
+        requested encodings.</t>
+
+        <t>Implementation may support different encoding method per
+        subscription. When bundled notifications is supported between the
+        publisher and the receiver, only subscribed notifications with the
+        same encoding can be bundled as one message.</t>
+      </section>
+    </section>
+
+    <section title="Using DTLS to Secure UPC">
+      <t>The <xref target="RFC6347">Datagram Transport Layer Security (DTLS)
+      protocol</xref> is designed to meet the requirements of applications
+      that need secure datagram transport.</t>
+
+      <t>DTLS can be used as a secure transport to counter all the primary
+      threats to UDP based Publication Channel:</t>
+
+      <t><list style="symbols">
+          <t>Confidentiality to counter disclosure of the message
+          contents.</t>
+
+          <t>Integrity checking to counter modifications to a message on a
+          hop- by-hop basis.</t>
+
+          <t>Server or mutual authentication to counter masquerade.</t>
+        </list>In addition, DTLS also provides:</t>
+
+      <t><list style="symbols">
+          <t>A cookie exchange mechanism during handshake to counter Denial of
+          Service attacks.</t>
+
+          <t>A sequence number in the header to counter replay attacks.</t>
+        </list></t>
+
+      <section title="Transport">
+        <t>As shown in Figure 6, the DTLS is layered next to the UDP transport
+        is to provide reusable security and authentication functions over UDP.
+        No DTLS extension is required to enable UPC messages over DTLS.</t>
+
+        <t><figure title="Fig. 6: Protocol Stack for DTLS secured UPC">
+            <artwork align="center"><![CDATA[
++-----------------------------+
+|           UPC Message       |
++-----------------------------+
+|            DTLS             |
++-----------------------------+
+|            UDP              |
++-----------------------------+
+|            IP               |
++-----------------------------+]]></artwork>
+          </figure></t>
+
+        <t>The application implementer will map a unique combination of the
+        remote address, remote port number, local address, and local port
+        number to a session.</t>
+
+        <t>Each UPC message is delivered by the DTLS record protocol, which
+        assigns a sequence number to each DTLS record. Although the DTLS
+        implementer may adopt a queue mechanism to resolve reordering, it may
+        not assure that all the messages are delivered in order when mapping
+        on the UDP transport.</t>
+
+        <t>Since UDP is an unreliable transport, with DTLS, an originator or
+        relay may not realize that a collector has gone down or lost its DTLS
+        connection state, so messages may be lost.</t>
+
+        <t>The DTLS record has its own sequence number, the encryption and
+        decryption will done by DTLS layer, UPC Message layer will not concern
+        this.</t>
+      </section>
+
+      <section title="Port Assignment">
+        <t>The Publisher is always a DTLS client, and the Receiver is always a
+        DTLS server. The Receivers MUST support accepting UPC Messages on the
+        UDP port PORT-Y, but MAY be configurable to listen on a different
+        port. The Publisher MUST support sending UPC messages to the UDP port
+        PORT-Y, but MAY be configurable to send messages to a different port.
+        The Publisher MAY use any source UDP port for transmitting
+        messages.</t>
+      </section>
+
+      <section title="DTLS Session Initiation">
+        <t>The Publisher initiates a DTLS connection by sending a DTLS Client
+        Hello to the Receiver. Implementations MUST support the denial of
+        service countermeasures defined by DTLS. When these countermeasures
+        are used, the Receiver responds with a DTLS Hello Verify Request
+        containing a cookie. The Publisher responds with a DTLS Client Hello
+        containing the received cookie, which initiates the DTLS handshake.
+        The Publisher MUST NOT send any UPC messages before the DTLS handshake
+        has successfully completed.</t>
+
+        <t>Implementations MUST support <xref target="RFC4347">DTLS 1.0</xref>
+        and MUST support the mandatory to implement cipher suite, which is
+        <xref target="RFC5246">TLS_RSA_WITH_AES_128_CBC_SHA</xref> as
+        specified in DTLS 1.0. If additional cipher suites are supported, then
+        implementations MUST NOT negotiate a cipher suite that employs NULL
+        integrity or authentication algorithms.</t>
+
+        <t>Where privacy is REQUIRED, then implementations must either
+        negotiate a cipher suite that employs a non-NULL encryption algorithm
+        or else achieve privacy by other means, such as a physically secured
+        network.</t>
+      </section>
+
+      <section title="Sending Data">
+        <t>All UPC messages MUST be sent as DTLS "application_data". It is
+        possible that multiple UPC messages be contained in one DTLS record,
+        or that a publication message be transferred in multiple DTLS records.
+        The application data is defined with the following <xref
+        target="RFC5234">ABNF</xref> expression:</t>
+
+        <t>APPLICATION-DATA = 1*UPC-FRAME</t>
+
+        <t>UPC-FRAME = MSG-LEN SP UPC-MSG</t>
+
+        <t>MSG-LEN = NONZERO-DIGIT *DIGIT</t>
+
+        <t>SP = %d32</t>
+
+        <t>NONZERO-DIGIT = %d49-57</t>
+
+        <t>DIGIT = %d48 / NONZERO-DIGIT</t>
+
+        <t>UPC-MSG is defined in section 5.2.</t>
+      </section>
+
+      <section title="Closure">
+        <t>A Publisher MUST close the associated DTLS connection if the
+        connection is not expected to deliver any UPC Messages later. It MUST
+        send a DTLS close_notify alert before closing the connection. A
+        Publisher (DTLS client) MAY choose to not wait for the Receiver's
+        close_notify alert and simply close the DTLS connection. Once the
+        Receiver gets a close_notify from the Publisher, it MUST reply with a
+        close_notify.</t>
+
+        <t>When no data is received from a DTLS connection for a long time
+        (where the application decides what "long" means), Receiver MAY close
+        the connection. The Receiver (DTLS server) MUST attempt to initiate an
+        exchange of close_notify alerts with the Publisher before closing the
+        connection. Receivers that are unprepared to receive any more data MAY
+        close the connection after sending the close_notify alert.</t>
+
+        <t>Although closure alerts are a component of TLS and so of DTLS,
+        they, like all alerts, are not retransmitted by DTLS and so may be
+        lost over an unreliable network.</t>
+      </section>
+    </section>
+
+    <section title="Congestion Control">
+      <t>Congestion control mechanisms that respond to congestion by reducing
+      traffic rates and establish a degree of fairness between flows that
+      share the same path are vital to the stable operation of the Internet
+      <xref target="RFC2914"/>. While efficient, UDP has no build-in
+      congestion control mechanism. Because streaming telemetry can generate
+      unlimited amounts of data, transferring this data over UDP is generally
+      problematic. It is not recommended to use the UDP based publication
+      channel over congestion-sensitive network paths. The only environments
+      where the UDP based publication channel MAY be used are managed
+      networks. The deployments require the network path has been explicitly
+      provisioned for the UDP based publication channel through traffic
+      engineering mechanisms, such as rate limiting or capacity
+      reservations.</t>
+    </section>
+
+    <section title="A YANG Data Model for Management of UPC">
+      <t>The YANG model defined in Section 9 has two leafs augmented into one
+      place of <xref
+      target="RFC8639">Sub-Notif</xref>,
+      plus one identities.</t>
+
+      <t><figure>
+          <artwork><![CDATA[
+    module: ietf-upc-subscribed-notifications
+     augment /sn:subscriptions/sn:subscription/sn:receivers/sn:receiver:
+       +--rw address?   inet:ip-address
+       +--rw port?      inet:port-number
+       +--rw enable-fragmentation?  boolean]]></artwork>
+        </figure></t>
+    </section>
+
+    <section title="YANG Module">
+      <t/>
+
+      <t><figure>
+          <artwork><![CDATA[
+<CODE BEGINS> file "ietf-upc-subscribed-notifications@2020-02-26.yang"
+module ietf-upc-subscribed-notifications {
+  yang-version 1.1;
+  namespace 
+    "urn:ietf:params:xml:ns:yang:ietf-upc-subscribed-notifications";
+  prefix upcsn;
+  import ietf-subscribed-notifications {
+    prefix sn;
+    reference
+      "RFC 8639: Subscription to YANG Notifications";
+  }
+  import ietf-inet-types {
+    prefix inet;
+    reference
+      "RFC 6991: Common YANG Data Types";
+  }
+
+  organization "IETF NETCONF (Network Configuration) Working Group";
+  contact
+    "WG Web:   <http:/tools.ietf.org/wg/netconf/>
+     WG List:  <mailto:netconf@ietf.org>
+
+     Editor:   Guangying Zheng
+               <mailto:zhengguangying@huawei.com>
+     
+     Editor:   Tianran Zhou
+               <mailto:zhoutianran@huawei.com>
+
+     Editor:   Alexander Clemm
+               <mailto:alexander.clemm@huawei.com>";
+
+
+  description
+    "Defines UDP Publish Channel as a supported transport for subscribed
+    event notifications.
+
+    Copyright (c) 2018 IETF Trust and the persons identified as authors
+    of the code.  All rights reserved.
+
+    Redistribution and use in source and binary forms, with or without
+    modification, is permitted pursuant to, and subject to the license
+    terms contained in, the Simplified BSD License set forth in Section
+    4.c of the IETF Trust's Legal Provisions Relating to IETF Documents
+    (https://trustee.ietf.org/license-info).
+
+    This version of this YANG module is part of RFC XXXX; see the RFC
+
+    itself for full legal notices.";
+
+  revision 2020-02-26 {
+    description
+      "Initial version";
+    reference
+      "RFC XXXX: UDP based Publication Channel for Streaming Telemetry";
+  }
+
+  identity upc {
+    base sn:transport;
+    description
+      "UPC is used as transport for notification messages and state
+       change notifications.";
+  }
+
+  identity encode-cbor {
+    base sn:encoding;
+    description
+      "Encode data using CBOR as described in RFC 7049.";
+    reference
+      "RFC 7049: Concise Binary Object Representation";
+  }
+
+  identity encode-gpb {
+    base sn:encoding;
+    description
+      "Encode data using gpb.";
+  }
+
+  grouping target-receiver {
+    description
+      "Provides a reusable description of a UPC target receiver.";
+    leaf address {
+      type inet:ip-address;
+      description
+        "IP address of target upc receiver, which can be IPv4 address or
+         IPV6 address.";
+    }
+    leaf port {
+      type inet:port-number;
+      description
+        "Port number of target UPC receiver, if not specify, system
+         should use default port number.";    
+    }
+	
+    leaf enable-fragmentation {
+      type boolean;
+      default false;
+      description
+        "The switch for the fragmentation feature. When disabled, the
+         publisher will not allow fragmentation for a very large data";
+    }	
+  }
+
+  augment "/sn:subscriptions/sn:subscription/sn:receivers/sn:receiver" {
+    description
+      "This augmentation allows UPC specific parameters to be
+       exposed for a subscription.";
+    uses target-receiver;
+  }
+}
+<CODE ENDS>]]></artwork>
+        </figure></t>
+    </section>
+
+    <section anchor="IANA" title="IANA Considerations">
+      <t>This RFC requests that IANA assigns three UDP port numbers in the
+      "Registered Port Numbers" range with the service names "upc" and
+      "upc-dtls". These ports will be the default ports for the UDP based
+      Publication Channel for NETCONF and RESTCONF. Below is the registration
+      template following the rules in <xref target="RFC6335"/>.</t>
+
+      <t>Service Name: upc</t>
+
+      <t>Transport Protocol(s): UDP</t>
+
+      <t>Assignee: IESG &lt;iesg@ietf.org&gt;</t>
+
+      <t>Contact: IETF Chair &lt;chair@ietf.org&gt;</t>
+
+      <t>Description: UDP based Publication Channel</t>
+
+      <t>Reference: RFC XXXX</t>
+
+      <t>Port Number: PORT-X</t>
+
+      <t/>
+
+      <t>Service Name: upc-dtls</t>
+
+      <t>Transport Protocol(s): UDP</t>
+
+      <t>Assignee: IESG &lt;iesg@ietf.org&gt;</t>
+
+      <t>Contact: IETF Chair &lt;chair@ietf.org&gt;</t>
+
+      <t>Description: UDP based Publication Channel (DTLS)</t>
+
+      <t>Reference: RFC XXXX</t>
+
+      <t>Port Number: PORT-Y</t>
+
+      <t/>
+
+      <t>IANA is requested to assign a new URI from the <xref
+      target="RFC3688">IETF XML Registry</xref>. The following URI is
+      suggested:</t>
+
+      <t><figure>
+          <artwork align="left"><![CDATA[
+URI: urn:ietf:params:xml:ns:yang:ietf-upc-subscribed-notifications
+Registrant Contact: The IESG.
+XML: N/A; the requested URI is an XML namespace.]]></artwork>
+        </figure></t>
+
+      <t>This document also requests a new YANG module name in the <xref
+      target="RFC7950">YANG Module Names registry</xref> with the following
+      suggestion:</t>
+
+      <t><figure>
+          <artwork align="left"><![CDATA[
+name: ietf-upc-subscribed-notifications
+namespace: urn:ietf:params:xml:ns:yang:ietf-upc-subscribed-notifications
+prefix: upcsn
+reference: RFC XXXX]]></artwork>
+        </figure></t>
+    </section>
+
+    <section anchor="Security" title="Security Considerations">
+      <t>TBD</t>
+    </section>
+
+    <section anchor="Acknowledgements" title="Acknowledgements">
+      <t>The authors of this documents would like to thank Eric Voit, Tim
+      Jenkins, and Huiyang Yang for the initial comments.</t>
+    </section>
+  </middle>
+
+  <back>
+    <references title="Normative References">
+      <?rfc include="reference.RFC.2119"?>
+
+      <?rfc include="reference.RFC.7950"?>
+
+      <?rfc include="reference.RFC.6241"?>
+
+      <?rfc include="reference.RFC.8040"?>
+
+      <?rfc include='reference.RFC.8200'?>
+
+      <?rfc include="reference.RFC.7049"?>
+
+      <?rfc include='reference.RFC.6347'?>
+
+      <?rfc include='reference.RFC.2914'?>
+
+      <?rfc include='reference.RFC.4347'?>
+
+      <?rfc include='reference.RFC.5246'?>
+
+      <?rfc include='reference.RFC.5234'?>
+
+      <?rfc include='reference.RFC.6335'?>
+
+      <?rfc include='reference.RFC.3688'?>
+	  
+      <?rfc include='reference.RFC.8639'?>	
+
+      <?rfc include='reference.RFC.8640'?>	  
+    </references>
+
+    <references title="Informative References">
+      <?rfc include='reference.I-D.ietf-netconf-restconf-notif'?>
+	  
+      <?rfc include='reference.I-D.ietf-netconf-https-notif'?>
+	  
+      <?rfc include='reference.I-D.zhou-netconf-multi-stream-originators'?>
+
+      <?rfc include="reference.I-D.ietf-netconf-notification-messages"?>
+    </references>
+
+  </back>
+</rfc>
